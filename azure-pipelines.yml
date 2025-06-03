@@ -1,0 +1,96 @@
+trigger:
+  - main
+
+pool:
+  vmImage: "windows-latest"
+
+variables:
+  solution: "**/*.sln"
+  buildPlatform: "Any CPU"
+  buildConfiguration: "Release"
+  ANDROID_SDK_ROOT: 'C:\Program Files (x86)\Android\android-sdk'
+
+steps:
+  - task: NuGetToolInstaller@1
+
+  - task: NuGetCommand@2
+    inputs:
+      restoreSolution: "$(solution)"
+
+  - task: NodeTool@0
+    inputs:
+      versionSpec: "18.x"
+    displayName: "Install Node.js"
+
+  - script: |
+      npm install -g appium@2.18.0
+      appium driver install uiautomator2
+    displayName: "Install Appium and UiAutomator2 Driver"
+
+  - task: PowerShell@2
+    inputs:
+      targetType: "inline"
+      script: |
+        $AndroidSDKPath = $env:ANDROID_SDK_ROOT
+        $sdkManager = "$AndroidSDKPath\tools\bin\sdkmanager.bat"
+
+        # Accept licenses
+        echo y | & $sdkManager --licenses
+
+        # Install required SDK packages
+        echo y | & $sdkManager "platform-tools" "platforms;android-33" "build-tools;33.0.0" "system-images;android-33;google_apis;x86_64"
+
+        # Create and start emulator
+        echo no | & "$AndroidSDKPath\tools\bin\avdmanager.bat" create avd -n Pixel_5 -k "system-images;android-33;google_apis;x86_64" --device "pixel_5"
+        Start-Process -FilePath "$AndroidSDKPath\emulator\emulator.exe" -ArgumentList "-avd Pixel_5 -no-window -no-audio -no-boot-anim" -NoNewWindow
+
+        # Wait for emulator to be ready
+        $adb = "$AndroidSDKPath\platform-tools\adb.exe"
+        while (-not (& $adb shell getprop sys.boot_completed 2>$null)) {
+          Write-Host "Waiting for emulator to start..."
+          Start-Sleep -Seconds 10
+        }
+        Write-Host "Emulator is ready!"
+    displayName: "Setup Android Emulator"
+
+  - task: DotNetCoreCLI@2
+    inputs:
+      command: "build"
+      projects: "**/*.csproj"
+      arguments: "--configuration $(buildConfiguration)"
+    displayName: "Build Solution"
+
+  - task: PowerShell@2
+    inputs:
+      targetType: "inline"
+      script: |
+        # Start Appium server
+        Start-Process -FilePath "appium" -NoNewWindow
+        Start-Sleep -Seconds 10  # Wait for Appium to start
+
+        # Install app
+        $adb = "$env:ANDROID_SDK_ROOT\platform-tools\adb.exe"
+        & $adb install "$(Build.SourcesDirectory)\GeneralStore.Mobile.Tests\General-Store.apk"
+    displayName: "Start Appium and Install App"
+
+  - task: DotNetCoreCLI@2
+    inputs:
+      command: "test"
+      projects: "**/*Tests/*.csproj"
+      arguments: '--configuration $(buildConfiguration) --logger trx --collect:"XPlat Code Coverage"'
+    displayName: "Run Tests"
+
+  - task: PublishTestResults@2
+    inputs:
+      testRunner: VSTest
+      testResultsFiles: "**/*.trx"
+    condition: always()
+    displayName: "Publish Test Results"
+
+  - task: PublishCodeCoverageResults@1
+    inputs:
+      codeCoverageTool: "Cobertura"
+      summaryFileLocation: "$(Agent.TempDirectory)/**/coverage.cobertura.xml"
+      reportDirectory: "$(Agent.TempDirectory)/**/coverage"
+    condition: always()
+    displayName: "Publish Code Coverage"

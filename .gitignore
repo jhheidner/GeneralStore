@@ -1,0 +1,47 @@
+# .NET build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+# Visual Studio files
+.vs/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.dbmdl
+*.dbproj.schemaview
+*.pfx
+*.publishsettings
+
+# IDE files
+.idea/
+*.sln.iml
+.vscode/
+
+# Test Results
+TestResults/
+[Tt]est[Rr]esult*/
+*.trx
+
+# Appium logs
+*.log
+
+# Node.js (for Appium)
+node_modules/
+
+# Android
+*.apk
+*.aab
+*.dex
+*.class
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+Desktop.ini 
